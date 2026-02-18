@@ -1,6 +1,11 @@
 import random
 import math
 
+# Constants for MCTS tuning
+MAX_ROLLOUT_MOVES_TO_CHECK = 10  # Number of moves to sample for SOS detection in rollouts
+SCORE_NORMALIZATION_FACTOR = 30.0  # Normalizes score differences to [0,1] range
+SOS_MOVE_VISIT_THRESHOLD = 0.7  # Minimum visit ratio to prefer immediate SOS moves
+
 
 class MCTSNode:
     """
@@ -111,7 +116,7 @@ class MCTSNode:
 
             # Quick heuristic: Check for SOS-creating moves (sampling for speed)
             # Only check a subset of moves to keep rollout fast
-            sample_size = min(10, len(possible_moves))
+            sample_size = min(MAX_ROLLOUT_MOVES_TO_CHECK, len(possible_moves))
             moves_to_check = random.sample(possible_moves, sample_size) if len(possible_moves) > sample_size else possible_moves
             
             sos_creating_move = None
@@ -176,8 +181,8 @@ class MCTSNode:
         score_diff = final_scores[self.player_to_move] - final_scores[1 - self.player_to_move]
         
         # Normalize to [0, 1] range
-        # SOS games typically have scores 0-20, so we normalize accordingly
-        value = 0.5 + (score_diff / 30.0)  # 30 allows for large score differences
+        # SOS games typically have scores 0-20, normalization factor allows for larger differences
+        value = 0.5 + (score_diff / SCORE_NORMALIZATION_FACTOR)
         value = max(0, min(1, value))  # Clamp to [0, 1]
 
         self.value_sum += value
@@ -268,10 +273,10 @@ class MCTSPlayer:
                 non_sos_children = [c for c in root.children if c.move not in sos_move_set]
                 max_non_sos_visits = max((c.visits for c in non_sos_children), default=0)
                 
-                # If any SOS child has at least 70% of max visits, choose the best SOS move
+                # If any SOS child has at least the threshold of max visits, choose the best SOS move
                 best_sos_child = max(sos_children, key=lambda c: (c.visits, c.value_sum / max(c.visits, 1)))
                 
-                if best_sos_child.visits >= 0.7 * max_non_sos_visits:
+                if best_sos_child.visits >= SOS_MOVE_VISIT_THRESHOLD * max_non_sos_visits:
                     if verbose:
                         print(f"\n🎯 Selecting immediate SOS move {best_sos_child.move}")
                     return best_sos_child.move

@@ -88,12 +88,16 @@ def test_play_quality():
         
         move = ai.get_move(game, verbose=False)
         
-        # Check if AI's move creates SOS
-        old_score = game.scores[game.current_player]
-        game.make_move(move)
-        new_score = game.scores[game.current_player if game.current_player == old_score else 1 - game.current_player]
+        # Track the player making the move for scoring purposes
+        moving_player = game.current_player
+        old_score = game.scores[moving_player]
         
-        # Note: This logic is simplified; in reality we need to track which player scored
+        game.make_move(move)
+        
+        # Check if the move created SOS (player's score increased)
+        new_score = game.scores[moving_player]
+        if new_score > old_score:
+            sos_moves_found += 1
         
         total_moves += 1
         
