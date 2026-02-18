@@ -11,7 +11,7 @@ def play_ai_vs_ai(num_simulations=500, verbose=True):
     move_count = 0
 
     if verbose:
-        print("=== AI vs AI Game ===\n")
+        print("AI vs AI game")
         game.print_board()
 
     while game.status() is None:
@@ -32,7 +32,7 @@ def play_ai_vs_ai(num_simulations=500, verbose=True):
             game.print_board()
 
     if verbose:
-        print(f"\n🎮 Game Over after {move_count} moves!")
+        print(f"Game over after {move_count} moves")
         print(f"Winner: Player {game.status()}")
 
     return game.status(), move_count
@@ -43,8 +43,8 @@ def play_human_vs_ai(num_simulations=500):
     game = SOSGame()
     ai_player = MCTSPlayer(num_simulations=num_simulations)
 
-    print("=== Human vs AI ===")
-    print("You are Player 0, AI is Player 1")
+    print("Human vs AI")
+    print("You are Player 0; AI is Player 1")
     game.print_board()
 
     while game.status() is None:
@@ -64,31 +64,31 @@ def play_human_vs_ai(num_simulations=500):
                         game.make_move(move)
                         break
                     else:
-                        print("❌ Illegal move! Try again.")
+                        print("Illegal move; try again.")
                 except:
-                    print("❌ Invalid input! Format: row col letter (e.g., '2 3 S')")
+                    print("Invalid input; use: row col letter (e.g., '2 3 S')")
         else:
             # AI's turn
-            print("\n🤖 AI is thinking...")
+            print("AI is thinking...")
             move = ai_player.get_move(game)
             print(f"AI plays: {move}")
             game.make_move(move)
 
         game.print_board()
 
-    print(f"\n🎮 Game Over!")
+    print(f"\nGame over")
     winner = game.status()
     if winner == 0:
-        print("🎉 You won!")
+        print("You won")
     elif winner == 1:
-        print("😔 AI won!")
+        print("AI won")
     else:
-        print("🤝 It's a draw!")
+        print("Draw")
 
 
 def benchmark_ai(num_games=10, num_simulations=500):
     """Run multiple games to benchmark the AI"""
-    print(f"=== Running {num_games} AI vs AI games ===")
+    print(f"Running {num_games} AI vs AI games")
     print(f"Simulations per move: {num_simulations}\n")
 
     results = {0: 0, 1: 0, "draw": 0}
@@ -101,7 +101,7 @@ def benchmark_ai(num_games=10, num_simulations=500):
         total_moves += moves
         print(f"Winner: {winner}, Moves: {moves}")
 
-    print("\n=== Results ===")
+    print("Results:")
     print(f"Player 0 wins: {results[0]}")
     print(f"Player 1 wins: {results[1]}")
     print(f"Draws: {results['draw']}")
@@ -110,10 +110,10 @@ def benchmark_ai(num_games=10, num_simulations=500):
 
 def test_mcts_quality():
     """Test if MCTS finds obvious winning moves"""
-    print("=== Testing MCTS Quality ===\n")
+    print("Testing MCTS quality")
 
     # Test 1: Should complete an obvious SOS
-    print("Test 1: Complete obvious SOS")
+    print("Test 1: complete obvious SOS")
     game = SOSGame()
     game.make_move((0, 0, 'S'))
     game.make_move((0, 1, 'O'))
@@ -137,17 +137,17 @@ def test_mcts_quality():
             f"  Score after (0,2,S): Player {game.current_player} would get {test_game.scores[game.current_player]} points")
 
         if move == (0, 2, 'S'):
-            print(f"  ✅ Found it with {num_sims} simulations!")
+                print(f"  Found with {num_sims} simulations")
             return
         else:
-            print(f"  ❌ Didn't find it")
+                print(f"  Did not find it")
 
-    print("\n❌ MCTS failed to find obvious winning move even with 1000 sims")
+    print("MCTS failed to find obvious move with tested sims")
 
 
 def test_mcts_basic():
     """Test that MCTS can play a complete game without errors"""
-    print("\n=== Test 2: Complete Game ===")
+    print("Test 2: complete game")
 
     game = SOSGame()
     ai = MCTSPlayer(num_simulations=100)
@@ -165,9 +165,9 @@ def test_mcts_basic():
     print(f"Scores: Player 0: {game.scores[0]}, Player 1: {game.scores[1]}")
 
     if game.status() is not None:
-        print("✅ Game completed successfully!\n")
+        print("Game completed successfully")
     else:
-        print("❌ Game didn't finish\n")
+        print("Game did not finish")
 
 if __name__ == '__main__':
     # Uncomment the test you want to run:
