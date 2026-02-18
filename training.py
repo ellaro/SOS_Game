@@ -27,7 +27,7 @@ class SelfPlayTrainer:
         Returns:
             training_data: list of (state, policy, value) tuples
         """
-        print(f"\n=== Generating {num_games} MCTS self-play games ===")
+        print(f"Generating {num_games} MCTS self-play games")
 
         mcts_player = MCTSPlayer(num_simulations=num_simulations)
         game_data = []
@@ -72,11 +72,10 @@ class SelfPlayTrainer:
 
                 game_data.append((state, policy, value))
 
-            if verbose and (game_num + 1) % 10 == 0:
-                print(f"Generated {game_num + 1}/{num_games} games | "
-                      f"Last game: {move_count} moves, winner: {result}")
+                if verbose and (game_num + 1) % 10 == 0:
+                    print(f"{game_num + 1}/{num_games} games generated; last winner: {result}")
 
-        print(f"✅ Generated {len(game_data)} training examples from {num_games} games")
+        print(f"Generated {len(game_data)} training examples")
         return game_data
 
     def generate_puct_games(self, num_games=100, num_simulations=400, temperature=1.0, verbose=True):
@@ -87,7 +86,7 @@ class SelfPlayTrainer:
         Returns:
             training_data: list of (state, policy, value) tuples
         """
-        print(f"\n=== Generating {num_games} PUCT self-play games ===")
+        print(f"Generating {num_games} PUCT self-play games")
 
         puct_player = PUCTPlayer(
             self.network,
@@ -137,11 +136,10 @@ class SelfPlayTrainer:
 
                 game_data.append((state, policy, value))
 
-            if verbose and (game_num + 1) % 10 == 0:
-                print(f"Generated {game_num + 1}/{num_games} games | "
-                      f"Last game: {move_count} moves, winner: {result}")
+                if verbose and (game_num + 1) % 10 == 0:
+                    print(f"{game_num + 1}/{num_games} games generated; last winner: {result}")
 
-        print(f"✅ Generated {len(game_data)} training examples from {num_games} games")
+        print(f"Generated {len(game_data)} training examples")
         return game_data
 
     def _move_to_action_index(self, move):
@@ -154,7 +152,7 @@ class SelfPlayTrainer:
         """
         Train network on collected data
         """
-        print(f"\n=== Training network for {epochs} epochs ===")
+        print(f"Training network for {epochs} epochs")
         print(f"Training data size: {len(training_data)}")
 
         for epoch in range(epochs):
@@ -164,12 +162,9 @@ class SelfPlayTrainer:
             )
 
             if verbose:
-                print(f"Epoch {epoch + 1}/{epochs} | "
-                      f"Loss: {avg_loss:.4f} | "
-                      f"Policy: {avg_p_loss:.4f} | "
-                      f"Value: {avg_v_loss:.4f}")
+                print(f"Epoch {epoch + 1}/{epochs} - loss {avg_loss:.4f}")
 
-        print("✅ Training complete!")
+        print("Training complete")
 
     def save_training_data(self, data, filename):
         """Save training data to file"""
@@ -181,7 +176,7 @@ class SelfPlayTrainer:
         """Load training data from file"""
         with open(filename, 'rb') as f:
             data = pickle.load(f)
-        print(f"Training data loaded from {filename} ({len(data)} examples)")
+        print(f"Training data loaded: {len(data)} examples")
         return data
 
 
@@ -277,7 +272,7 @@ def iterative_training_pipeline(network, num_iterations=5, games_per_iter=100):
 
 if __name__ == '__main__':
     # Quick test with small numbers
-    print("=== Quick Test ===\n")
+    print("Quick test")
 
     # Test 1: Generate small amount of MCTS data
     trainer = SelfPlayTrainer()
@@ -289,8 +284,8 @@ if __name__ == '__main__':
     # Test 3: Generate PUCT games with trained network
     puct_data = trainer.generate_puct_games(num_games=3, num_simulations=100)
 
-    print("\n✅ All tests passed!")
-    print("\nTo run full training, uncomment one of these:")
+    print("All tests passed")
+    print("To run full training, uncomment one of these:")
     print("# initial_training_pipeline(num_mcts_games=1000, epochs=20)")
     print("# network = GameNetwork.load('your_network.pth')")
     print("# iterative_training_pipeline(network, num_iterations=5, games_per_iter=100)")

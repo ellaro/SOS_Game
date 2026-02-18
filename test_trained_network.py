@@ -3,24 +3,19 @@ from puct import PUCTPlayer
 from mcts import MCTSPlayer
 from network import GameNetwork
 
-print("=" * 70)
-print("  TESTING TRAINED NETWORK")
-print("=" * 70)
+print("TESTING TRAINED NETWORK")
 
-# Load the trained network
-print("\nLoading trained network...")
+# Load trained network
 network = GameNetwork.load("network_mcts_20260203_223556.pth")
 
 # Create players
 puct_player = PUCTPlayer(network, num_simulations=200, temperature=0)
 mcts_player = MCTSPlayer(num_simulations=200)
 
-print("\n✅ Network loaded!")
+print("Network loaded")
 
 # Test 1: PUCT finds obvious move
-print("\n" + "=" * 70)
-print("TEST 1: Can PUCT find obvious winning move?")
-print("=" * 70)
+print("TEST 1: PUCT finds obvious move")
 
 game = SOSGame()
 game.make_move((0, 0, 'S'))
@@ -28,19 +23,17 @@ game.make_move((0, 1, 'O'))
 
 game.print_board()
 
-print("\nExpected: (0, 2, 'S') - completes SOS")
+print("Expected move: (0, 2, 'S')")
 move = puct_player.get_move(game, verbose=True)
 print(f"\nPUCT chose: {move}")
 
 if move == (0, 2, 'S'):
-    print("✅ SUCCESS! PUCT found the winning move!")
+    print("PUCT found the winning move")
 else:
-    print("❌ PUCT didn't find it (but that's okay, it's still learning)")
+    print("PUCT did not find the winning move")
 
 # Test 2: Play a full game
-print("\n" + "=" * 70)
-print("TEST 2: PUCT vs MCTS - Full Game")
-print("=" * 70)
+print("TEST 2: PUCT vs MCTS - full game")
 
 game2 = SOSGame()
 move_count = 0
@@ -65,19 +58,16 @@ print(f"\n\nGame finished in {move_count} moves")
 game2.print_board()
 
 winner = game2.status()
-if winner == 0:
-    print("🎉 PUCT (trained network) WON!")
-elif winner == 1:
-    print("🤖 MCTS (pure search) won")
-else:
-    print("🤝 Draw")
+    if winner == 0:
+        print("PUCT won")
+    elif winner == 1:
+        print("MCTS won")
+    else:
+        print("Draw")
 
 print(f"\nScores:")
 print(f"  PUCT: {game2.scores[0]}")
 print(f"  MCTS: {game2.scores[1]}")
 
-print("\n" + "=" * 70)
-print("  TESTING COMPLETE")
-print("=" * 70)
-print("\nYour network is trained and working!")
-print("You can now use it for Exercise 6.")
+print("TESTING COMPLETE")
+print("Network appears to be working")
