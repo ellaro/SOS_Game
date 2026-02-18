@@ -23,7 +23,6 @@ class SOSGame:
         if self._is_board_full():
             self.game_over = True
 
-        # החזר מידע לצורך unmake
         return (sos_count, changed_player)
 
     def unmake_move(self, move, move_info):

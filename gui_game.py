@@ -225,7 +225,7 @@ class SOSGameGUI:
 
         elif mode == 'human_vs_mcts':
             # REDUCED simulations from 100 to 50 for faster response
-            self.ai_player = MCTSPlayer(num_simulations=50)
+            self.ai_player = MCTSPlayer(num_simulations=5000)
             self.status_label.config(text="🤖 Playing against MCTS AI (Player 1)")
 
         elif mode == 'human_vs_human':
