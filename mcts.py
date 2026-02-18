@@ -1,5 +1,11 @@
 import random
 import math
+import time
+
+
+def in_bounds(r, c):
+    """Return True if (r,c) is inside the 8x8 board."""
+    return 0 <= r < 8 and 0 <= c < 8
 
 
 class MCTSNode:
@@ -17,9 +23,8 @@ class MCTSNode:
         self.untried_moves = game_state.legal_moves()  # Moves not yet explored
 
         # Track which player is to move at THIS node (for proper backprop)
-        self.player_to_move = 0
-        if self.parent is not None:
-            self.player_to_move = self.parent.game_state.current_player
+        # Use the game state's current player directly (was incorrect before)
+        self.player_to_move = game_state.current_player
 
     def is_fully_expanded(self):
         """Check if all possible moves have been tried"""
@@ -38,14 +43,22 @@ class MCTSNode:
 
         for child in self.children:
             if child.visits == 0:
-                # Unvisited children get infinite value
+                # Unvisited children get infinite value (encourage exploration)
                 ucb_value = float('inf')
             else:
-                # Average value from this child's perspective
-                avg_value = child.value_sum / child.visits
+                # Average value from this child's stored perspective
+                child_avg = child.value_sum / child.visits
 
-                # UCB1 formula
-                exploration = c_param * math.sqrt((2 * math.log(self.visits)) / child.visits)
+                # Convert child's average value to the parent's perspective.
+                # child_avg is from perspective of child.player_to_move.
+                # We want value from perspective of the player to move at this node.
+                if child.player_to_move == self.player_to_move:
+                    avg_value = child_avg
+                else:
+                    avg_value = 1.0 - child_avg
+
+                # UCB1 formula (guard against log(0) and div-by-zero)
+                exploration = c_param * math.sqrt((2 * math.log(self.visits + 1)) / (child.visits + 1))
                 ucb_value = avg_value + exploration
 
             choices_weights.append(ucb_value)
@@ -61,13 +74,11 @@ class MCTSNode:
         self.untried_moves.pop()
 
 
-        # Create new game state
+        # Create new game state and child node
         next_state = self.game_state.clone()
         next_state.make_move(move)
 
-        # Create child node
         child_node = MCTSNode(next_state, parent=self, move=move)
-
         self.children.append(child_node)
 
         return child_node
@@ -75,16 +86,56 @@ class MCTSNode:
 
     #no clone
     def rollout(self):
-        """We're gonna use the current scores as a fast proxy to estimate who is winning."""
-        current_state = self.game_state
-        if current_state.scores[0] > current_state.scores[1]:
-            result = 0
-        elif current_state.scores[0] < current_state.scores[1]:
-            result = 1
-        else:
-            result = "draw"
+        """Perform a random playout until terminal and return the result.
 
-        return result, current_state.scores
+        This replaces the earlier flawed shortcut that used the current
+        partial scores instead of simulating to the end.
+        """
+        state = self.game_state.clone()
+
+        # Play until terminal. Prefer moves that immediately create SOS.
+        while state.status() is None:
+            moves = state.legal_moves()
+            if not moves:
+                break
+
+            # Heuristic: if any move creates an SOS, prefer those
+            sos_moves = []
+            # We can't call unmake_move here without extra bookkeeping,
+            # so use a lightweight heuristic: prefer moves where placing 'S' or 'O'
+            # would form the pattern by checking neighbors directly.
+            sos_moves = []
+            for m in moves:
+                r, c, letter = m
+                # quick local check for possible SOS formation
+                if letter == 'S':
+                    directions = [(0,1),(0,-1),(1,0),(-1,0),(1,1),(-1,-1),(1,-1),(-1,1)]
+                    for dr, dc in directions:
+                        r2, c2 = r + dr, c + dc
+                        r3, c3 = r + 2*dr, c + 2*dc
+                        if in_bounds(r2, c2) and in_bounds(r3, c3):
+                            if state.board[r2][c2] == 'O' and state.board[r3][c3] == 'S':
+                                sos_moves.append(m)
+                                break
+                else:  # 'O'
+                    basic_directions = [(0,1),(1,0),(1,1),(1,-1)]
+                    for dr, dc in basic_directions:
+                        r_before, c_before = r - dr, c - dc
+                        r_after, c_after = r + dr, c + dc
+                        if in_bounds(r_before, c_before) and in_bounds(r_after, c_after):
+                            if state.board[r_before][c_before] == 'S' and state.board[r_after][c_after] == 'S':
+                                sos_moves.append(m)
+                                break
+
+            if sos_moves:
+                move = random.choice(sos_moves)
+            else:
+                move = random.choice(moves)
+
+            state.make_move(move)
+
+        result = state.status()
+        return result, state.scores
 
     def backpropagate(self, result, final_scores):
         """
@@ -115,8 +166,14 @@ class MCTSPlayer:
     MCTS-based AI player
     """
 
-    def __init__(self, num_simulations=200):
+    def __init__(self, num_simulations=200, time_limit=None):
+        """
+        Args:
+            num_simulations: maximum number of simulations to run
+            time_limit: optional wall-clock time limit in seconds (overrides simulations if set)
+        """
         self.num_simulations = num_simulations
+        self.time_limit = time_limit
 
     def get_move(self, game_state, verbose=False):
         """
@@ -124,8 +181,28 @@ class MCTSPlayer:
         """
         root = MCTSNode(game_state.clone())
 
-        # Run simulations
-        for _ in range(self.num_simulations):
+        # QUICK WIN CHECK: if any legal root move immediately creates SOS,
+        # play it instantly (fast tactical awareness).
+        for mv in game_state.legal_moves():
+            tmp = game_state.clone()
+            move_info = tmp.make_move(mv)
+            # make_move returns (sos_count, changed_player)
+            if move_info[0] > 0:
+                return mv
+
+        # Run simulations (either fixed count or until time limit)
+        start_time = time.time()
+
+        if self.time_limit is None:
+            sim_iter = range(self.num_simulations)
+        else:
+            sim_iter = iter(int, 1)  # infinite iterator; we'll break on time
+
+        for sim_i, _ in enumerate(sim_iter):
+            # Stop if time limit reached
+            if self.time_limit is not None and (time.time() - start_time) >= self.time_limit:
+                break
+
             node = root
 
             # 1.Selection: traverse tree using UCB1
@@ -141,6 +218,14 @@ class MCTSPlayer:
 
             # 4.Backpropagation: update statistics
             node.backpropagate(result, final_scores)
+
+            # Early stopping: if one child dominates visits, stop early
+            if sim_i % 10 == 0 and root.children:
+                total_visits = sum(c.visits for c in root.children)
+                if total_visits > 0:
+                    top_visits = max(c.visits for c in root.children)
+                    if top_visits / total_visits > 0.95:
+                        break
 
         # Debug output
         if verbose and root.children:

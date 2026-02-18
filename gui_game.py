@@ -76,6 +76,30 @@ class SOSGameGUI:
 
         tk.Button(
             btn_frame,
+            text="👤 vs AI (PUCT)",
+            command=lambda: self.start_game('human_vs_puct'),
+            font=("Arial", 10),
+            bg='#f39c12',
+            fg='white',
+            width=15,
+            height=1,
+            relief=tk.RAISED,
+            bd=2
+        ).pack(side=tk.LEFT, padx=3)
+
+        # Option: whether to load a trained network for PUCT
+        self.use_trained_var = tk.BooleanVar(value=False)
+        tk.Checkbutton(
+            self.mode_frame,
+            text="Use trained network for PUCT",
+            variable=self.use_trained_var,
+            bg='#2c3e50',
+            fg='#ecf0f1',
+            selectcolor='#2c3e50'
+        ).pack(pady=4)
+
+        tk.Button(
+            btn_frame,
             text="👥 vs Human",
             command=lambda: self.start_game('human_vs_human'),
             font=("Arial", 10),
@@ -228,6 +252,25 @@ class SOSGameGUI:
             self.ai_player = MCTSPlayer(num_simulations=5000)
             self.status_label.config(text="🤖 Playing against MCTS AI (Player 1)")
 
+        elif mode == 'human_vs_puct':
+            # If user requested, try to load the trained network; otherwise
+            # use a fresh random `GameNetwork` so PUCT still runs but doesn't
+            # automatically load any file.
+            if self.use_trained_var.get():
+                try:
+                    network = GameNetwork.load("network_mcts_20260203_223556.pth")
+                    info_text = "🤖 Playing against PUCT AI (trained network) (Player 1)"
+                except Exception:
+                    network = GameNetwork()
+                    info_text = "🤖 Trained network not found — using random network (Player 1)"
+            else:
+                network = GameNetwork()
+                info_text = "🤖 Playing against PUCT AI (random network) (Player 1)"
+
+            # Use PUCT with moderate sims for GUI responsiveness
+            self.ai_player = PUCTPlayer(network, num_simulations=150, temperature=0)
+            self.status_label.config(text=info_text)
+
         elif mode == 'human_vs_human':
             self.ai_player = None
             self.status_label.config(text="👥 Human vs Human - Player 0's turn")
@@ -294,7 +337,9 @@ class SOSGameGUI:
             # Update UI in main thread
             self.root.after(0, self.after_ai_move)
         except Exception as e:
-            print(f"AI Error: {e}")
+            # log to console only via exception, avoid noisy prints
+            import traceback
+            traceback.print_exc()
             self.root.after(0, self.after_ai_move)
 
     def after_ai_move(self):

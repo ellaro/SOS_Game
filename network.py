@@ -213,36 +213,4 @@ class NetworkTrainer:
                 total_value_loss / num_batches)
 
 
-# Test the network
-if __name__ == '__main__':
-    from main import SOSGame
-
-    print("=== Testing GameNetwork ===\n")
-
-    # Create network
-    net = GameNetwork()
-    print(f"Network created with {sum(p.numel() for p in net.parameters())} parameters")
-
-    # Test with a game state
-    game = SOSGame()
-    game.make_move((0, 0, 'S'))
-    game.make_move((0, 1, 'O'))
-
-    print("\nTesting prediction:")
-    policy, value = net.predict(game)
-    print(f"Policy shape: {policy.shape}")
-    print(f"Policy sum (should be ~1): {policy.sum():.4f}")
-    print(f"Value: {value:.4f}")
-
-    # Test save/load
-    print("\nTesting save/load:")
-    net.save("test_network.pth")
-    net2 = GameNetwork.load("test_network.pth")
-
-    policy2, value2 = net2.predict(game)
-    print(f"Values match after load: {abs(value - value2) < 1e-6}")
-
-    # Clean up
-    os.remove("test_network.pth")
-
-    print("\n✅ Network tests passed!")
+# No top-level test/demo code here; use the separate test scripts if needed.

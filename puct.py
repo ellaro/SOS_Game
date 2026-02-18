@@ -36,7 +36,8 @@ class PUCTNode:
         best_score = -float('inf')
         best_child = None
 
-        sqrt_parent_visits = math.sqrt(self.visit_count)
+        # Use (visit_count + 1) to avoid zero and stabilize the exploration term
+        sqrt_parent_visits = math.sqrt(self.visit_count + 1)
 
         for child in self.children:
             # Q value (average value from this child's perspective)
@@ -137,7 +138,7 @@ class PUCTPlayer:
     PUCT-based AI player using neural network guidance
     """
 
-    def __init__(self, network, num_simulations=800, c_puct=1.0, temperature=1.0):
+    def __init__(self, network, num_simulations=800, c_puct=1.0, temperature=1.0, time_limit=None):
         """
         Args:
             network: GameNetwork for policy and value predictions
@@ -149,6 +150,7 @@ class PUCTPlayer:
         self.num_simulations = num_simulations
         self.c_puct = c_puct
         self.temperature = temperature
+        self.time_limit = time_limit
 
     def get_move(self, game_state, return_probs=False, verbose=False):
         """
@@ -165,8 +167,37 @@ class PUCTPlayer:
         """
         root = PUCTNode(game_state.clone())
 
-        # Run simulations
-        for sim in range(self.num_simulations):
+        # QUICK WIN CHECK: if any legal root move immediately creates SOS,
+        # play it instantly (fast tactical awareness).
+        for mv in game_state.legal_moves():
+            tmp = game_state.clone()
+            move_info = tmp.make_move(mv)
+            if move_info[0] > 0:
+                return mv
+
+        # Expand root once to get priors and optionally add Dirichlet noise
+        root.expand(self.network)
+        # If root has children, add Dirichlet noise to encourage exploration
+        if root.children:
+            eps = 0.25
+            alpha = 0.03
+            noise = np.random.dirichlet([alpha] * len(root.children))
+            for i, child in enumerate(root.children):
+                child.prior_prob = child.prior_prob * (1 - eps) + noise[i] * eps
+
+        # Run simulations (count or time-limited)
+        import time
+        start_time = time.time()
+
+        if self.time_limit is None:
+            sim_iter = range(self.num_simulations)
+        else:
+            sim_iter = iter(int, 1)
+
+        for sim in sim_iter:
+            # Stop if time limit reached
+            if self.time_limit is not None and (time.time() - start_time) >= self.time_limit:
+                break
             node = root
             search_path = [node]
 
@@ -205,6 +236,14 @@ class PUCTPlayer:
                 node_in_path.update(value)
                 value = -value  # Flip for opponent
 
+            # Early stopping: if one root child dominates visits, stop early
+            if sim % 10 == 0 and root.children:
+                visits = np.array([child.visit_count for child in root.children])
+                total = visits.sum()
+                if total > 0:
+                    if visits.max() / total > 0.95:
+                        break
+
         # Select move based on visit counts
         if not root.children:
             # No legal moves
@@ -242,45 +281,4 @@ class PUCTPlayer:
         return best_move
 
 
-# Test PUCT
-if __name__ == '__main__':
-    from main import SOSGame
-    from network import GameNetwork
-
-    print("=== Testing PUCT ===\n")
-
-    # Create network and PUCT player
-    network = GameNetwork()
-    puct_player = PUCTPlayer(network, num_simulations=100, c_puct=1.0)
-
-    # Test on simple position
-    game = SOSGame()
-    game.make_move((0, 0, 'S'))
-    game.make_move((0, 1, 'O'))
-
-    print("Testing PUCT move selection:")
-    game.print_board()
-
-    move = puct_player.get_move(game, verbose=True)
-    print(f"\nPUCT selected move: {move}")
-
-    # Test full game
-    print("\n=== Playing full game ===")
-    game2 = SOSGame()
-    move_count = 0
-
-    while game2.status() is None and move_count < 64:
-        move = puct_player.get_move(game2)
-        if move is None:
-            break
-        game2.make_move(move)
-        move_count += 1
-
-        if move_count % 10 == 0:
-            print(f"Move {move_count}...", end=" ", flush=True)
-
-    print(f"\nGame finished in {move_count} moves")
-    print(f"Winner: {game2.status()}")
-    print(f"Scores: {game2.scores}")
-
-    print("\n✅ PUCT tests passed!")
+# No top-level test code in this module; tests are run via separate scripts.

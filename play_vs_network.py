@@ -22,8 +22,7 @@ def play_human_vs_network(network_file=None):
     if network_file is None:
         network_file = find_latest_network()
         if network_file is None:
-            print("No trained network found!")
-            print("Please run: python run_training.py first")
+            print("No trained network found. Run training first.")
             return
 
     print(f"Loading network from: {network_file}")
@@ -32,13 +31,9 @@ def play_human_vs_network(network_file=None):
     # Create AI player
     ai = PUCTPlayer(network, num_simulations=400, temperature=0)
 
-    print("\n" + "=" * 60)
-    print("  PLAY AGAINST THE TRAINED NEURAL NETWORK!")
-    print("=" * 60)
-    print("\nYou are Player 0 (starts first)")
-    print("AI is Player 1")
+    print("Play against trained network")
+    print("You are Player 0 (start); AI is Player 1")
     print("Enter moves as: row col letter (e.g., '2 3 S')")
-    print("=" * 60 + "\n")
 
     game = SOSGame()
     game.print_board()
@@ -61,7 +56,7 @@ def play_human_vs_network(network_file=None):
                     letter = user_input[2].upper()
 
                     if letter not in ['S', 'O']:
-                        print("Letter must be 'S' or 'O'")
+                        print("Letter must be S or O")
                         continue
 
                     move = (r, c, letter)
@@ -70,47 +65,41 @@ def play_human_vs_network(network_file=None):
                         game.make_move(move)
                         break
                     else:
-                        print("❌ Illegal move! Cell is occupied or out of bounds.")
-                        print(f"Legal moves: {len(game.legal_moves())} available")
+                        print("Illegal move; cell occupied or out of bounds.")
+                        print(f"Legal moves: {len(game.legal_moves())}")
                 except ValueError:
-                    print("❌ Invalid input! Use format: row col letter (e.g., '2 3 S')")
+                    print("Invalid input; use: row col letter (e.g., '2 3 S')")
                 except KeyboardInterrupt:
-                    print("\n\nGame interrupted!")
+                    print("Game interrupted")
                     return
 
         else:
             # AI's turn
-            print(f"\n{'=' * 40}")
-            print("AI THINKING... (Player 1)")
-            print(f"{'=' * 40}")
-
+            print("AI thinking...")
             move = ai.get_move(game, verbose=True)
             if move:
                 print(f"AI plays: {move}")
                 game.make_move(move)
             else:
-                print("AI has no legal moves!")
+                print("AI has no legal moves")
                 break
 
         game.print_board()
 
     # Game over
-    print("\n" + "=" * 60)
-    print("  GAME OVER!")
-    print("=" * 60)
+    print("Game over")
 
     winner = game.status()
     if winner == 0:
-        print("🎉 YOU WON! 🎉")
+        print("You won")
     elif winner == 1:
-        print("🤖 AI WON! 🤖")
+        print("AI won")
     else:
-        print("🤝 IT'S A DRAW! 🤝")
+        print("Draw")
 
-    print(f"\nFinal Scores:")
-    print(f"  You (Player 0): {game.scores[0]}")
-    print(f"  AI  (Player 1): {game.scores[1]}")
-    print("=" * 60)
+    print("Final scores:")
+    print(f"  You: {game.scores[0]}")
+    print(f"  AI:  {game.scores[1]}")
 
 
 if __name__ == '__main__':
