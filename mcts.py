@@ -27,7 +27,7 @@ class MCTSNode:
         """Check if this is a terminal node (game over)"""
         return self.game_state.status() is not None
 
-    def best_child(self, c_param=1.4):
+    def best_child(self, c_param=1.0):
         """
         Select best child using UCB1 formula
         UCB1 = value/visits + c * sqrt(ln(parent_visits) / visits)
@@ -70,9 +70,11 @@ class MCTSNode:
             else:
                 regular_moves.append(move)
 
-        # Prefer SOS moves
+        # Prefer SOS moves - track if this was an SOS move
+        is_sos_move = False
         if sos_moves:
             move = sos_moves.pop()
+            is_sos_move = True
             # Remove from untried_moves
             self.untried_moves = [m for m in self.untried_moves if m != move]
         else:
@@ -82,21 +84,21 @@ class MCTSNode:
         next_state = self.game_state.clone()
         next_state.make_move(move)
 
-        # Create child node with bonus for immediate SOS
+        # Create child node
         child_node = MCTSNode(next_state, parent=self, move=move)
 
-        # Give initial bonus to SOS-creating moves
-        if move in sos_moves or (next_state.scores[self.game_state.current_player] >
-                                 self.game_state.scores[self.game_state.current_player]):
-            child_node.value_sum = 0.8  # Initial optimism
-            child_node.visits = 1
+        # Give initial bonus to SOS-creating moves (fixed bug)
+        if is_sos_move:
+            # Strong initial bias for SOS moves to ensure they get explored
+            child_node.value_sum = 5.0  # Strong initial optimism
+            child_node.visits = 5  # Act as if we've already explored it successfully
 
         self.children.append(child_node)
 
         return child_node
 
     def rollout(self):
-        """Simulate a completely RANDOM game (fastest)"""
+        """Simulate a semi-smart game - prefer SOS-creating moves with fast heuristic"""
         current_state = self.game_state.clone()
 
         max_moves = 64
@@ -107,11 +109,58 @@ class MCTSNode:
             if not possible_moves:
                 break
 
-            move = random.choice(possible_moves)
+            # Quick heuristic: Check for SOS-creating moves (sampling for speed)
+            # Only check a subset of moves to keep rollout fast
+            sample_size = min(10, len(possible_moves))
+            moves_to_check = random.sample(possible_moves, sample_size) if len(possible_moves) > sample_size else possible_moves
+            
+            sos_creating_move = None
+            for move in moves_to_check:
+                r, c, letter = move
+                # Quick check: Does this move complete an SOS?
+                # This is a simplified heuristic check
+                if self._quick_sos_check(current_state, r, c, letter):
+                    sos_creating_move = move
+                    break
+            
+            # Use SOS move if found, otherwise random
+            if sos_creating_move:
+                move = sos_creating_move
+            else:
+                move = random.choice(possible_moves)
+            
             current_state.make_move(move)
             move_count += 1
 
         return current_state.status(), current_state.scores
+    
+    def _quick_sos_check(self, state, r, c, letter):
+        """Quick heuristic to check if a move likely creates SOS"""
+        board = state.board
+        
+        if letter == 'S':
+            # Check if placing S creates SOS pattern (S-O-S or O-S)
+            # Look for existing O adjacent
+            directions = [(0, 1), (0, -1), (1, 0), (-1, 0), (1, 1), (-1, -1), (1, -1), (-1, 1)]
+            for dr, dc in directions:
+                r2, c2 = r + dr, c + dc
+                if 0 <= r2 < 8 and 0 <= c2 < 8 and board[r2][c2] == 'O':
+                    # Check if there's an S on the other side
+                    r3, c3 = r2 + dr, c2 + dc
+                    if 0 <= r3 < 8 and 0 <= c3 < 8 and board[r3][c3] == 'S':
+                        return True
+        elif letter == 'O':
+            # Check if placing O creates SOS (between two S's)
+            directions = [(0, 1), (1, 0), (1, 1), (1, -1)]
+            for dr, dc in directions:
+                r_before, c_before = r - dr, c - dc
+                r_after, c_after = r + dr, c + dc
+                if (0 <= r_before < 8 and 0 <= c_before < 8 and
+                    0 <= r_after < 8 and 0 <= c_after < 8 and
+                    board[r_before][c_before] == 'S' and board[r_after][c_after] == 'S'):
+                    return True
+        
+        return False
 
     def backpropagate(self, result, final_scores):
         """
@@ -122,18 +171,14 @@ class MCTSNode:
         """
         self.visits += 1
 
-        # Calculate value from the perspective of player_to_move at this node
-        if result == "draw":
-            value = 0.5
-        elif result == self.player_to_move:
-            value = 1.0  # Win for the player to move at this node
-        else:
-            value = 0.0  # Loss for the player to move at this node
-
-        # Alternative: use score difference (better for SOS)
-        # score_diff = final_scores[self.player_to_move] - final_scores[1 - self.player_to_move]
-        # value = 0.5 + (score_diff / 20.0)  # Normalize to roughly [0, 1]
-        # value = max(0, min(1, value))  # Clamp to [0, 1]
+        # Use score difference for better evaluation (critical for SOS game)
+        # This captures not just wins/losses but also the margin of victory
+        score_diff = final_scores[self.player_to_move] - final_scores[1 - self.player_to_move]
+        
+        # Normalize to [0, 1] range
+        # SOS games typically have scores 0-20, so we normalize accordingly
+        value = 0.5 + (score_diff / 30.0)  # 30 allows for large score differences
+        value = max(0, min(1, value))  # Clamp to [0, 1]
 
         self.value_sum += value
 
@@ -147,13 +192,33 @@ class MCTSPlayer:
     MCTS-based AI player
     """
 
-    def __init__(self, num_simulations=1000):
+    def __init__(self, num_simulations=3500):
         self.num_simulations = num_simulations
 
     def get_move(self, game_state, verbose=False):
         """
         Get the best move using MCTS
         """
+        # Quick pre-check: If there's an immediate SOS-creating move, strongly prefer it
+        legal_moves = game_state.legal_moves()
+        immediate_sos_moves = []
+        
+        for move in legal_moves:
+            test_state = game_state.clone()
+            old_score = test_state.scores[test_state.current_player]
+            test_state.make_move(move)
+            new_score = test_state.scores[game_state.current_player]
+            
+            if new_score > old_score:
+                immediate_sos_moves.append((move, new_score - old_score))
+        
+        # If we found immediate SOS moves, heavily bias toward them
+        if immediate_sos_moves:
+            if verbose:
+                print(f"\n💡 Found {len(immediate_sos_moves)} immediate SOS-creating moves!")
+                for move, score_gain in immediate_sos_moves:
+                    print(f"   {move} would gain {score_gain} points")
+        
         root = MCTSNode(game_state.clone())
 
         # Run simulations
@@ -184,11 +249,33 @@ class MCTSPlayer:
                 print(f"{i + 1}. Move {child.move}: visits={child.visits}, "
                       f"value_sum={child.value_sum:.1f}, avg_value={win_rate:.3f}")
 
-        # Choose the most visited child (most robust choice)
+        # Choose the best move
         if not root.children:
             # No children expanded - return random legal move
             legal = game_state.legal_moves()
             return random.choice(legal) if legal else None
 
+        # Special handling for immediate SOS moves
+        # If we have immediate SOS moves, prefer them if they're in top candidates
+        if immediate_sos_moves:
+            sos_move_set = set(move for move, _ in immediate_sos_moves)
+            
+            # Find SOS moves among explored children
+            sos_children = [c for c in root.children if c.move in sos_move_set]
+            
+            if sos_children:
+                # Get the most visited non-SOS child for comparison
+                non_sos_children = [c for c in root.children if c.move not in sos_move_set]
+                max_non_sos_visits = max((c.visits for c in non_sos_children), default=0)
+                
+                # If any SOS child has at least 70% of max visits, choose the best SOS move
+                best_sos_child = max(sos_children, key=lambda c: (c.visits, c.value_sum / max(c.visits, 1)))
+                
+                if best_sos_child.visits >= 0.7 * max_non_sos_visits:
+                    if verbose:
+                        print(f"\n🎯 Selecting immediate SOS move {best_sos_child.move}")
+                    return best_sos_child.move
+        
+        # Default: choose the most visited child (most robust choice)
         best_child = max(root.children, key=lambda c: c.visits)
         return best_child.move
