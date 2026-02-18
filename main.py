@@ -2,28 +2,76 @@ import copy
 
 
 class SOSGame:
+    """
+    SOS Game Implementation
+    
+    SOS is a two-player game where players take turns writing either 'S' or 'O' in empty
+    cells of an 8x8 grid. The goal is to create the sequence "SOS" (horizontally, 
+    vertically, or diagonally). Each time a player creates an SOS pattern, they score
+    a point and get another turn. The player with the most points when the board is
+    full wins.
+    
+    Rules:
+    - 8x8 grid
+    - Players alternate placing 'S' or 'O' in empty cells
+    - Creating SOS (in any direction) scores 1 point and grants another turn
+    - Game ends when board is full
+    - Highest score wins
+    """
+    
     def __init__(self):
+        """
+        Initialize a new SOS game
+        
+        State:
+            board: 8x8 grid, each cell is None (empty), 'S', or 'O'
+            current_player: 0 or 1 (whose turn it is)
+            scores: [player0_score, player1_score]
+            game_over: boolean flag
+        """
         self.board = [[None for _ in range(8)] for _ in range(8)]
-        self.current_player = 0
+        self.current_player = 0  # Player 0 starts
         self.scores = [0, 0]
         self.game_over = False
 
     def make_move(self, move):
+        """
+        Execute a move and update game state
+        
+        This is the main game logic:
+        1. Place the letter on the board
+        2. Check for SOS patterns created by this move
+        3. Award points and extra turn if SOS was created
+        4. Switch players if no SOS was created
+        5. Check if game is over (board full)
+        
+        Args:
+            move: Tuple of (row, col, letter) where letter is 'S' or 'O'
+            
+        Returns:
+            (sos_count, changed_player): Info needed for unmake_move
+        """
         r, c, letter = move
-        assert self.board[r][c] is None
+        assert self.board[r][c] is None, "Cell must be empty"
 
+        # Place the letter
         self.board[r][c] = letter
+        
+        # Check if this move created any SOS patterns
         sos_count = self._check_sos(r, c)
         self.scores[self.current_player] += sos_count
 
+        # If SOS was created, player gets another turn (don't change player)
+        # Otherwise, switch to the other player
         changed_player = sos_count == 0
         if changed_player:
             self.current_player = 1 - self.current_player
 
+        # Check for game end condition (board full)
         if self._is_board_full():
             self.game_over = True
 
-        # החזר מידע לצורך unmake
+        # Return info needed to undo this move (for search algorithms)
         return (sos_count, changed_player)
 
     def unmake_move(self, move, move_info):
@@ -103,11 +151,29 @@ class SOSGame:
         return moves
 
     def _check_sos(self, r, c):
-        """Check how many SOS patterns were created by the last move"""
+        """
+        Check how many SOS patterns were created by the last move at position (r, c)
+        
+        This is the core scoring logic. We check all 8 directions (horizontal, vertical,
+        and both diagonals) for SOS patterns that include the newly placed letter.
+        
+        Key insight: We only need to check patterns involving the NEW letter!
+        - If we placed 'S': check if it's the start OR end of S-O-S
+        - If we placed 'O': check if it's the middle of S-O-S
+        
+        This is more efficient than checking the entire board.
+        
+        Args:
+            r, c: Position of the newly placed letter
+            
+        Returns:
+            sos_count: Number of SOS patterns created (can be multiple!)
+        """
         letter = self.board[r][c]
         sos_count = 0
 
         # 8 directions to check (all combinations of row/col movements)
+        # We check in all directions to find SOS patterns
         directions = [
             (0, 1),  # horizontal right
             (0, -1),  # horizontal left
