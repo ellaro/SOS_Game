@@ -58,12 +58,12 @@ print(f"\n\nGame finished in {move_count} moves")
 game2.print_board()
 
 winner = game2.status()
-    if winner == 0:
-        print("PUCT won")
-    elif winner == 1:
-        print("MCTS won")
-    else:
-        print("Draw")
+if winner == 0:
+    print("PUCT won")
+elif winner == 1:
+    print("MCTS won")
+else:
+    print("Draw")
 
 print(f"\nScores:")
 print(f"  PUCT: {game2.scores[0]}")

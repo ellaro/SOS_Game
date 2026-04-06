@@ -151,7 +151,7 @@ class NetworkTrainer:
 
         # Convert to tensors
         states_tensor = torch.FloatTensor(states)
-        target_policies_tensor = torch.FloatTensor(target_policies)
+        target_policies_tensor = torch.FloatTensor(np.array(target_policies))
         target_values_tensor = torch.FloatTensor(target_values).unsqueeze(1)
 
         # Forward pass

@@ -137,10 +137,10 @@ def test_mcts_quality():
             f"  Score after (0,2,S): Player {game.current_player} would get {test_game.scores[game.current_player]} points")
 
         if move == (0, 2, 'S'):
-                print(f"  Found with {num_sims} simulations")
+            print(f"  Found with {num_sims} simulations")
             return
         else:
-                print(f"  Did not find it")
+            print(f"  Did not find it")
 
     print("MCTS failed to find obvious move with tested sims")
 

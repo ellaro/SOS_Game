@@ -2,6 +2,77 @@ import math
 import numpy as np
 
 
+# ============================================================================
+# Canonical move <-> action index mapping (shared with training code)
+# ============================================================================
+
+def move_to_action_index(move):
+    """
+    Convert a move (row, col, letter) to an action index (0-127).
+    
+    Action space: 0-127 (64 cells × 2 letters)
+    - Cells are ordered: row 0→7, col 0→7 (left-to-right, top-to-bottom)
+    - Even indices = 'S', Odd indices = 'O'
+    
+    Example:
+        (0, 0, 'S') -> 0
+        (0, 0, 'O') -> 1
+        (0, 1, 'S') -> 2
+        (0, 1, 'O') -> 3
+        (7, 7, 'S') -> 126
+        (7, 7, 'O') -> 127
+    """
+    row, col, letter = move
+    cell_idx = row * 8 + col
+    action_idx = cell_idx * 2 + (0 if letter == 'S' else 1)
+    return action_idx
+
+
+def action_index_to_move(action_idx):
+    """
+    Convert an action index (0-127) to a move (row, col, letter).
+    Inverse of move_to_action_index().
+    """
+    idx = int(action_idx)
+    cell_idx = idx // 2
+    row = cell_idx // 8
+    col = cell_idx % 8
+    letter = 'S' if idx % 2 == 0 else 'O'
+    return (row, col, letter)
+
+
+def mask_illegal_moves(policy_probs, legal_moves):
+    """
+    Mask out illegal moves and renormalize policy probabilities.
+    
+    Args:
+        policy_probs: numpy array of shape (128,) from network
+        legal_moves: list of legal moves as (row, col, letter) tuples
+    
+    Returns:
+        masked_probs: numpy array of shape (128,) with illegal moves zeroed
+                      and probabilities renormalized to sum to 1
+    """
+    masked = np.zeros(128, dtype=np.float32)
+    
+    # Set probabilities only for legal moves
+    for move in legal_moves:
+        action_idx = move_to_action_index(move)
+        masked[action_idx] = policy_probs[action_idx]
+    
+    # Renormalize
+    total = masked.sum()
+    if total > 0:
+        masked /= total
+    else:
+        # Fallback: uniform distribution over legal moves
+        legal_action_indices = [move_to_action_index(m) for m in legal_moves]
+        for idx in legal_action_indices:
+            masked[idx] = 1.0 / len(legal_action_indices)
+    
+    return masked
+
+
 class PUCTNode:
     """
     A node in the PUCT search tree
@@ -41,7 +112,11 @@ class PUCTNode:
 
         for child in self.children:
             # Q value (average value from this child's perspective)
-            q_value = child.Q
+            q_value = 0
+            if child.player_to_move == self.player_to_move:
+                q_value = child.Q
+            else:
+                q_value = -child.Q
 
             # Exploration bonus
             u_value = c_puct * child.prior_prob * sqrt_parent_visits / (1 + child.visit_count)
@@ -57,57 +132,82 @@ class PUCTNode:
 
     def expand(self, network):
         """
-        Expand this node by creating children for all legal moves
-        Uses network to get prior probabilities
+        Expand this node by creating children for all legal moves.
+        Uses network to get prior probabilities, masks illegal moves, and renormalizes.
         """
         if self.is_expanded or self.is_terminal():
             return
 
-        # Get policy and value from network
-        policy_probs, _ = network.predict(self.game_state)
+        # Get policy and value from network (policy is shape 128)
+        policy_probs, value = network.predict(self.game_state)
 
         # Get legal moves
         legal_moves = self.game_state.legal_moves()
 
         if not legal_moves:
             self.is_expanded = True
-            return
+            return value
 
-        # Create a child for each legal move
+        # Mask illegal moves and renormalize probabilities
+        children = []
+        priors = []
+
         for move in legal_moves:
-            # Get action index for this move
-            # We need to find which action index corresponds to this move
-            # We'll use decode to find the mapping
-            action_idx = self._move_to_action_index(move)
-
-            # Get prior probability for this action
+            action_idx = move_to_action_index(move)
             prior = policy_probs[action_idx]
 
-            # Create new game state
             next_state = self.game_state.clone()
             next_state.make_move(move)
 
-            # Create child node
-            child = PUCTNode(next_state, parent=self, move=move, prior_prob=prior)
-            self.children.append(child)
+            child = PUCTNode(
+                next_state,
+                parent=self,
+                move=move,
+                prior_prob=prior
+            )
 
-        # Normalize priors (make sure they sum to 1)
-        total_prior = sum(child.prior_prob for child in self.children)
-        if total_prior > 0:
-            for child in self.children:
-                child.prior_prob /= total_prior
+            children.append(child)
+            priors.append(prior)
+
+        # 🔥 Normalize ONLY over legal moves
+        priors = np.array(priors, dtype=np.float32)
+
+        if priors.sum() > 0:
+            priors /= priors.sum()
+        else:
+            priors = np.ones_like(priors) / len(priors)
+
+        # Assign back
+        for i, child in enumerate(children):
+            child.prior_prob = priors[i]
+
+        self.children = children
+
+        # Create a child for each legal move
+        # for move in legal_moves:
+        #     # Get action index for this move using canonical mapping
+        #     action_idx = move_to_action_index(move)
+        #
+        #     # Get prior probability for this action (from masked, renormalized policy)
+        #     prior = masked_policy[action_idx]
+        #
+        #     # Create new game state
+        #     next_state = self.game_state.clone()
+        #     next_state.make_move(move)
+        #
+        #     # Create child node
+        #     child = PUCTNode(next_state, parent=self, move=move, prior_prob=prior)
+        #     self.children.append(child)
+
+        # Priors should already sum to ~1 after masking, but double-check
+        # total_prior = sum(child.prior_prob for child in self.children)
+        # if total_prior > 0 and abs(total_prior - 1.0) > 1e-6:
+        #     for child in self.children:
+        #         child.prior_prob /= total_prior
 
         self.is_expanded = True
+        return value
 
-    def _move_to_action_index(self, move):
-        """
-        Convert a move (r, c, letter) to an action index (0-127)
-        Inverse of decode function
-        """
-        r, c, letter = move
-        cell = r * 8 + c
-        action_idx = cell * 2 + (0 if letter == 'S' else 1)
-        return action_idx
 
     def update(self, value):
         """
@@ -173,6 +273,11 @@ class PUCTPlayer:
             tmp = game_state.clone()
             move_info = tmp.make_move(mv)
             if move_info[0] > 0:
+                if return_probs:
+                    # Must return visit_probs too — use one-hot for the chosen move
+                    visit_probs_full = np.zeros(128, dtype=np.float32)
+                    visit_probs_full[move_to_action_index(mv)] = 1.0
+                    return mv, visit_probs_full
                 return mv
 
         # Expand root once to get priors and optionally add Dirichlet noise
@@ -209,15 +314,10 @@ class PUCTPlayer:
             # Expansion and evaluation
             if not node.is_terminal():
                 # Expand node using network
-                node.expand(self.network)
-
-                # If we expanded, select a child
-                if node.children:
-                    node = node.select_child(self.c_puct)
-                    search_path.append(node)
+                value = node.expand(self.network)
 
             # Evaluation: use network to evaluate leaf node
-            if node.is_terminal():
+            else:
                 # Terminal node - use actual game result
                 result = node.game_state.status()
                 if result == "draw":
@@ -226,10 +326,6 @@ class PUCTPlayer:
                     value = 1
                 else:
                     value = -1
-            else:
-                # Non-terminal - use network value prediction
-                _, value = self.network.predict(node.game_state)
-                # Value is from current player's perspective at this node
 
             # Backpropagation
             for node_in_path in reversed(search_path):
@@ -274,9 +370,19 @@ class PUCTPlayer:
         best_move = moves[best_idx]
 
         if return_probs:
-            # Return visit count distribution (for training)
-            visit_probs = visits / visits.sum()
-            return best_move, visit_probs
+            # Return visit count distribution aligned with full action space (128 actions)
+            # Illegal moves will have probability 0
+            visit_probs_full = np.zeros(128, dtype=np.float32)
+            for child in root.children:
+                action_idx = move_to_action_index(child.move)
+                visit_probs_full[action_idx] = child.visit_count
+            
+            # Normalize to sum to 1
+            total_visits = visit_probs_full.sum()
+            if total_visits > 0:
+                visit_probs_full /= total_visits
+            
+            return best_move, visit_probs_full
 
         return best_move
 

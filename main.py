@@ -1,4 +1,5 @@
 import copy
+import numpy as np
 
 
 class SOSGame:
@@ -197,8 +198,27 @@ class SOSGame:
         print(f"Current player: {self.current_player}")
         print(f"Game over: {self.game_over}")
 
+    def to_tensor(self):
+        """
+        Convert board to tensor for neural network
+        Shape: (3, 8, 8)
+        """
 
-# ==================== TESTING FUNCTIONS ====================
+        board_tensor = np.zeros((3, 8, 8), dtype=np.float32)
+
+        for r in range(8):
+            for c in range(8):
+                if self.board[r][c] == 'S':
+                    board_tensor[0][r][c] = 1
+                elif self.board[r][c] == 'O':
+                    board_tensor[1][r][c] = 1
+
+        # Current player channel
+        board_tensor[2][:][:] = self.current_player
+
+        return board_tensor
+
+#TESTING FUNCTIONS
 
 def test_basic_sos():
     """Test basic SOS detection"""
