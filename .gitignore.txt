@@ -1,12 +1,12 @@
-# סביבות וירטואליות
+# Virtual Environment
 venv/
 venvsos/
 
-# קבצי זיכרון ומודלים כבדים
+# Memory files and large models
 *.pth
 *.pkl
 *.dll
 
-# קבצי הגדרות של PyCharm
+#PyCharm settings files
 .idea/
 __pycache__/
