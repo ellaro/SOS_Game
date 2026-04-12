@@ -4,7 +4,7 @@ A Python implementation of the SOS game with multiple AI strategies including Mo
 
 ## 🎮 What is SOS Game?
 
-SOS is a combinatorial game where players take turns placing either 'S' or 'O' on a grid. The goal is to create the sequence "SOS" (horizontally, vertically, or diagonally). Each time a player creates an SOS pattern, they score a point and get another turn. The player with the most SOS patterns when the board is full wins.
+SOS is a combinatorial game where players take turns placing either 'S' or 'O' on a grid. The goal is to create the sequence "SOS" (horizontally, vertically, or diagonally). Each time a player crea[...]  
 
 ## 🚀 Features
 
@@ -18,6 +18,25 @@ SOS is a combinatorial game where players take turns placing either 'S' or 'O' o
   - **MCTS with UCB1**: Strategic tree search with heuristic rollouts
   - **Deep Neural Network**: Policy and value network trained via self-play
   - **AlphaZero-style Training**: Combines MCTS with neural network guidance
+
+## 🧠 AlphaZero and PUCT
+
+This project includes an **AlphaZero-style** training loop and a **PUCT-based** MCTS variant (see `training.py` and `puct.py`) to combine neural network guidance with tree search.
+
+### AlphaZero (in this project)
+
+- **What it is**: AlphaZero is a self-play reinforcement learning approach that trains a policy + value network and improves it iteratively using MCTS to generate better targets.
+- **How it maps to SOS_Game**: The neural network is trained via self-play, and MCTS uses the network’s policy/value estimates to guide move selection.
+- **Where to look**:
+  - `training.py` / `run_training.py` for the self-play training loop
+  - `network.py` for the policy/value model
+
+### PUCT (Predictor + UCT)
+
+- **What it is**: PUCT is a tree-policy used in AlphaZero that balances **exploration** (trying less-visited moves) and **exploitation** (choosing moves with high value/prior).
+- **How it’s used here**: The network provides prior probabilities over actions, and PUCT uses those priors along with visit counts and value estimates to select child nodes during MCTS.
+- **Where to look**:
+  - `puct.py` for the PUCT selection logic
 
 ## 📋 Requirements
 
